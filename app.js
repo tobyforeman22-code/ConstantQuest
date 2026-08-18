@@ -12,8 +12,9 @@ const appEl = document.getElementById('app');
 /* ---------------------------------------------------------------- */
 
 let currentSession = null;
-let currentProfile = null; // { id, username }
+let currentProfile = null; // { id, username, current_streak, longest_streak, last_practice_date }
 let cloudProgress = {};    // constantId -> difficultyId -> { bestStreak, perfect, attempts }
+let cloudSpeedruns = {};   // constantId -> timeLimit -> { bestStreak, bestCpm, attempts }
 let friendships = [];      // raw rows from Backend.listFriendships
 
 async function handleSignedIn(session) {
@@ -25,6 +26,7 @@ async function handleSignedIn(session) {
   }
   if (currentProfile) {
     await refreshCloudProgress();
+    await refreshCloudSpeedruns();
     await refreshFriendships();
     await migrateLocalProgress();
   }
@@ -34,6 +36,7 @@ function handleSignedOut() {
   currentSession = null;
   currentProfile = null;
   cloudProgress = {};
+  cloudSpeedruns = {};
   friendships = [];
 }
 
@@ -44,6 +47,17 @@ async function refreshCloudProgress() {
     if (!cloudProgress[r.constant_id]) cloudProgress[r.constant_id] = {};
     cloudProgress[r.constant_id][r.difficulty_id] = {
       bestStreak: r.best_streak, perfect: r.perfect, attempts: r.attempts
+    };
+  });
+}
+
+async function refreshCloudSpeedruns() {
+  const rows = await Backend.fetchAllSpeedruns(currentProfile.id);
+  cloudSpeedruns = {};
+  rows.forEach(r => {
+    if (!cloudSpeedruns[r.constant_id]) cloudSpeedruns[r.constant_id] = {};
+    cloudSpeedruns[r.constant_id][r.time_limit] = {
+      bestStreak: r.best_streak, bestCpm: r.best_cpm, attempts: r.attempts
     };
   });
 }
@@ -163,6 +177,192 @@ function setLastDifficulty(id) {
 }
 
 /* ---------------------------------------------------------------- */
+/* Daily practice streak                                              */
+/* ---------------------------------------------------------------- */
+
+const STREAK_STORAGE_KEY = 'constantquest_streak_v1';
+
+function todayStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function daysBetween(dateStrA, dateStrB) {
+  const a = new Date(dateStrA + 'T00:00:00');
+  const b = new Date(dateStrB + 'T00:00:00');
+  return Math.round((b - a) / 86400000);
+}
+
+function loadLocalStreak() {
+  try {
+    return JSON.parse(localStorage.getItem(STREAK_STORAGE_KEY)) ||
+      { currentStreak: 0, longestStreak: 0, lastPracticeDate: null };
+  } catch (e) {
+    return { currentStreak: 0, longestStreak: 0, lastPracticeDate: null };
+  }
+}
+
+function saveLocalStreak(streak) {
+  localStorage.setItem(STREAK_STORAGE_KEY, JSON.stringify(streak));
+}
+
+function getStreakState() {
+  if (currentProfile) {
+    return {
+      currentStreak: currentProfile.current_streak || 0,
+      longestStreak: currentProfile.longest_streak || 0,
+      lastPracticeDate: currentProfile.last_practice_date || null
+    };
+  }
+  return loadLocalStreak();
+}
+
+function computeStreakUpdate(prev) {
+  const today = todayStr();
+  if (prev.lastPracticeDate === today) return prev; // already counted today
+
+  const newCurrent = (prev.lastPracticeDate && daysBetween(prev.lastPracticeDate, today) === 1)
+    ? prev.currentStreak + 1
+    : 1;
+
+  return {
+    currentStreak: newCurrent,
+    longestStreak: Math.max(prev.longestStreak, newCurrent),
+    lastPracticeDate: today
+  };
+}
+
+async function touchDailyStreak() {
+  const prev = getStreakState();
+  const updated = computeStreakUpdate(prev);
+  if (updated === prev) return prev;
+
+  if (currentProfile) {
+    currentProfile.current_streak = updated.currentStreak;
+    currentProfile.longest_streak = updated.longestStreak;
+    currentProfile.last_practice_date = updated.lastPracticeDate;
+    try {
+      await Backend.updateStreak(currentProfile.id, updated.currentStreak, updated.longestStreak, updated.lastPracticeDate);
+    } catch (e) {
+      console.error('Failed to sync streak to Supabase', e);
+    }
+  } else {
+    saveLocalStreak(updated);
+  }
+  return updated;
+}
+
+/* ---------------------------------------------------------------- */
+/* Speed Run storage (guest / local fallback)                        */
+/* ---------------------------------------------------------------- */
+
+const SPEEDRUN_STORAGE_KEY = 'constantquest_speedruns_v1';
+
+function loadLocalSpeedruns() {
+  try {
+    return JSON.parse(localStorage.getItem(SPEEDRUN_STORAGE_KEY)) || {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveLocalSpeedruns(data) {
+  localStorage.setItem(SPEEDRUN_STORAGE_KEY, JSON.stringify(data));
+}
+
+function getLocalSpeedrunEntry(constantId, timeLimit) {
+  const data = loadLocalSpeedruns();
+  return (data[constantId] && data[constantId][timeLimit]) || { bestStreak: 0, bestCpm: 0, attempts: 0 };
+}
+
+function recordLocalSpeedrunAttempt(constantId, timeLimit, streak, cpm) {
+  const data = loadLocalSpeedruns();
+  if (!data[constantId]) data[constantId] = {};
+  const existing = data[constantId][timeLimit] || { bestStreak: 0, bestCpm: 0, attempts: 0 };
+  data[constantId][timeLimit] = {
+    bestStreak: Math.max(existing.bestStreak, streak),
+    bestCpm: Math.max(existing.bestCpm, cpm),
+    attempts: existing.attempts + 1
+  };
+  saveLocalSpeedruns(data);
+  return data[constantId][timeLimit];
+}
+
+/* ---------------------------------------------------------------- */
+/* Speed Run storage (unified — cloud when signed in)                 */
+/* ---------------------------------------------------------------- */
+
+function getSpeedrunEntry(constantId, timeLimit) {
+  if (currentProfile) {
+    return (cloudSpeedruns[constantId] && cloudSpeedruns[constantId][timeLimit]) ||
+      { bestStreak: 0, bestCpm: 0, attempts: 0 };
+  }
+  return getLocalSpeedrunEntry(constantId, timeLimit);
+}
+
+async function recordSpeedrunAttempt(constantId, timeLimit, streak, cpm) {
+  if (currentProfile) {
+    const existing = getSpeedrunEntry(constantId, timeLimit);
+    const updated = {
+      bestStreak: Math.max(existing.bestStreak, streak),
+      bestCpm: Math.max(existing.bestCpm, cpm),
+      attempts: existing.attempts + 1
+    };
+    if (!cloudSpeedruns[constantId]) cloudSpeedruns[constantId] = {};
+    cloudSpeedruns[constantId][timeLimit] = updated;
+    try {
+      await Backend.upsertSpeedrun(
+        currentProfile.id, constantId, timeLimit, updated.bestStreak, updated.bestCpm, updated.attempts
+      );
+    } catch (e) {
+      console.error('Failed to sync speed run to Supabase', e);
+    }
+    return updated;
+  }
+  return recordLocalSpeedrunAttempt(constantId, timeLimit, streak, cpm);
+}
+
+/* ---------------------------------------------------------------- */
+/* Achievements                                                       */
+/* ---------------------------------------------------------------- */
+
+function buildAchievementContext() {
+  const perfectSet = new Set();
+  let totalAttempts = 0;
+  CONSTANTS.forEach(c => {
+    DIFFICULTIES.forEach(d => {
+      const entry = getEntry(c.id, d.id);
+      totalAttempts += entry.attempts;
+      if (entry.perfect) perfectSet.add(`${c.id}:${d.id}`);
+    });
+  });
+
+  let bestSpeedStreak = 0;
+  CONSTANTS.forEach(c => {
+    SPEED_LIMITS.forEach(limit => {
+      const entry = getSpeedrunEntry(c.id, limit);
+      if (entry.bestStreak > bestSpeedStreak) bestSpeedStreak = entry.bestStreak;
+    });
+  });
+
+  return {
+    perfectSet,
+    totalAttempts,
+    longestStreak: getStreakState().longestStreak,
+    friendsCount: currentProfile ? friendships.filter(f => f.status === 'accepted').length : 0,
+    bestSpeedStreak
+  };
+}
+
+function getUnlockedAchievements() {
+  const ctx = buildAchievementContext();
+  return ACHIEVEMENTS.map(a => ({ ...a, unlocked: a.check(ctx) }));
+}
+
+/* ---------------------------------------------------------------- */
 /* Helpers                                                            */
 /* ---------------------------------------------------------------- */
 
@@ -236,6 +436,15 @@ function render() {
 function renderHeader() {
   const nav = document.getElementById('header-nav');
   nav.innerHTML = '';
+
+  const streakState = getStreakState();
+  if (streakState.currentStreak > 0) {
+    const streakChip = document.createElement('span');
+    streakChip.className = 'streak-chip';
+    streakChip.textContent = `🔥 ${streakState.currentStreak}`;
+    streakChip.title = `${streakState.currentStreak}-day practice streak (longest: ${streakState.longestStreak})`;
+    nav.appendChild(streakChip);
+  }
 
   const lbBtn = document.createElement('button');
   lbBtn.className = 'ghost-btn';
@@ -327,6 +536,55 @@ function renderStats() {
   intro.textContent = currentProfile
     ? `Signed in as ${currentProfile.username} — progress is saved to your account.`
     : 'Guest mode — progress is saved on this device only. Sign in to save it permanently and appear on leaderboards.';
+
+  function streakStat(value, label) {
+    const wrap = document.createElement('div');
+    wrap.className = 'streak-stat';
+    const v = document.createElement('div');
+    v.className = 'streak-value';
+    v.textContent = value;
+    const l = document.createElement('div');
+    l.className = 'streak-label';
+    l.textContent = label;
+    wrap.appendChild(v);
+    wrap.appendChild(l);
+    return wrap;
+  }
+
+  const streakState = getStreakState();
+  const streakBanner = document.createElement('div');
+  streakBanner.className = 'streak-banner';
+  streakBanner.appendChild(streakStat(`🔥 ${streakState.currentStreak}`, 'Current streak'));
+  streakBanner.appendChild(streakStat(streakState.longestStreak, 'Longest streak'));
+  intro.insertAdjacentElement('afterend', streakBanner);
+
+  const achievementsSection = document.createElement('div');
+  achievementsSection.className = 'achievements-section';
+  const achHeading = document.createElement('h2');
+  achHeading.textContent = 'Achievements';
+  achievementsSection.appendChild(achHeading);
+
+  const achGrid = document.createElement('div');
+  achGrid.className = 'achievements-grid';
+  getUnlockedAchievements().forEach(a => {
+    const card = document.createElement('div');
+    card.className = 'achievement-card' + (a.unlocked ? ' unlocked' : '');
+    const icon = document.createElement('div');
+    icon.className = 'achievement-icon';
+    icon.textContent = a.icon;
+    const name = document.createElement('div');
+    name.className = 'achievement-name';
+    name.textContent = a.name;
+    const desc = document.createElement('div');
+    desc.className = 'achievement-desc';
+    desc.textContent = a.description;
+    card.appendChild(icon);
+    card.appendChild(name);
+    card.appendChild(desc);
+    achGrid.appendChild(card);
+  });
+  achievementsSection.appendChild(achGrid);
+  streakBanner.insertAdjacentElement('afterend', achievementsSection);
 
   const table = frag.getElementById('stats-table');
 
@@ -830,6 +1088,7 @@ function renderDetail(c) {
   const tabs = frag.querySelectorAll('.mode-tab');
   const learnPanel = frag.getElementById('learn-panel');
   const quizPanel = frag.getElementById('quiz-panel');
+  const speedPanel = frag.getElementById('speed-panel');
 
   tabs.forEach(tab => {
     tab.addEventListener('click', () => {
@@ -837,7 +1096,10 @@ function renderDetail(c) {
       tabs.forEach(t => t.classList.toggle('active', t === tab));
       learnPanel.classList.toggle('hidden', currentMode !== 'learn');
       quizPanel.classList.toggle('hidden', currentMode !== 'quiz');
-      if (currentMode === 'learn') renderLearnPanel(); else renderQuizPanel();
+      speedPanel.classList.toggle('hidden', currentMode !== 'speed');
+      if (currentMode === 'learn') renderLearnPanel();
+      else if (currentMode === 'quiz') renderQuizPanel();
+      else renderSpeedPanel();
     });
   });
 
@@ -1069,7 +1331,9 @@ function renderDetail(c) {
       const priorEntry = getEntry(c.id, currentDifficulty);
       const isNewBest = streak > priorEntry.bestStreak;
       await recordAttempt(c.id, currentDifficulty, streak, perfect);
+      await touchDailyStreak();
       updateBestStreakLabel();
+      renderHeader();
 
       const resultBox = document.createElement('div');
       resultBox.className = 'quiz-result ' + (perfect ? 'success' : 'fail');
@@ -1113,6 +1377,186 @@ function renderDetail(c) {
     }
 
     if (!finished) hiddenInput.focus();
+  }
+
+  /* -------------------- Speed Run mode -------------------- */
+
+  let speedTimeLimit = SPEED_LIMITS[1]; // default to the middle option
+
+  function renderSpeedPanel() {
+    speedPanel.innerHTML = '';
+    drawSpeedIntro();
+  }
+
+  function drawSpeedIntro() {
+    speedPanel.innerHTML = '';
+
+    const info = document.createElement('p');
+    info.className = 'quiz-target-info';
+    info.textContent = `Race the clock — type as many correct characters of ${c.name} as you can before time runs out.`;
+    speedPanel.appendChild(info);
+
+    const limitRow = document.createElement('div');
+    limitRow.className = 'difficulty-buttons speed-limit-buttons';
+    SPEED_LIMITS.forEach(limit => {
+      const btn = document.createElement('button');
+      btn.className = 'diff-btn' + (limit === speedTimeLimit ? ' active' : '');
+      btn.textContent = `${limit}s`;
+      btn.addEventListener('click', () => { speedTimeLimit = limit; drawSpeedIntro(); });
+      limitRow.appendChild(btn);
+    });
+    speedPanel.appendChild(limitRow);
+
+    const best = getSpeedrunEntry(c.id, speedTimeLimit);
+    const bestText = document.createElement('p');
+    bestText.className = 'learn-progress-text';
+    bestText.textContent = best.attempts
+      ? `Personal best at ${speedTimeLimit}s: ${best.bestStreak} in a row, ${Math.round(best.bestCpm)} correct chars/min.`
+      : `No attempts yet at ${speedTimeLimit}s — give it a shot!`;
+    speedPanel.appendChild(bestText);
+
+    const startBtn = document.createElement('button');
+    startBtn.className = 'primary-btn';
+    startBtn.textContent = `Start ${speedTimeLimit}s Speed Run`;
+    startBtn.addEventListener('click', () => runSpeedSession());
+    speedPanel.appendChild(startBtn);
+  }
+
+  function runSpeedSession() {
+    speedPanel.innerHTML = '';
+    const target = `${c.intPart}.${c.digits}`; // race against the full 100 digits
+    let typedValue = '';
+    let finished = false;
+    let startTime = null;
+    let timerInterval = null;
+
+    const timerEl = document.createElement('div');
+    timerEl.className = 'speed-timer';
+    timerEl.textContent = `${speedTimeLimit.toFixed(1)}s`;
+    speedPanel.appendChild(timerEl);
+
+    const displayWrap = document.createElement('div');
+    displayWrap.className = 'quiz-input-display';
+    speedPanel.appendChild(displayWrap);
+
+    const hiddenInput = document.createElement('input');
+    hiddenInput.type = 'text';
+    hiddenInput.inputMode = 'decimal';
+    hiddenInput.autocomplete = 'off';
+    hiddenInput.className = 'quiz-hidden-input';
+    hiddenInput.maxLength = target.length;
+    speedPanel.appendChild(hiddenInput);
+
+    const controls = document.createElement('div');
+    controls.className = 'quiz-controls';
+    const stopBtn = document.createElement('button');
+    stopBtn.className = 'secondary-btn';
+    stopBtn.textContent = 'Stop early';
+    stopBtn.addEventListener('click', () => finish());
+    controls.appendChild(stopBtn);
+    speedPanel.appendChild(controls);
+
+    const resultHolder = document.createElement('div');
+    resultHolder.id = 'speed-result-holder';
+    speedPanel.appendChild(resultHolder);
+
+    function renderQDigit(pos) {
+      const typedChar = typedValue[pos];
+      const span = document.createElement('span');
+      if (typedChar === undefined) {
+        span.className = 'q-digit pending';
+        span.textContent = '_';
+      } else if (typedChar === target[pos]) {
+        span.className = 'q-digit correct';
+        span.textContent = typedChar;
+      } else {
+        span.className = 'q-digit wrong';
+        span.textContent = typedChar;
+      }
+      if (pos === typedValue.length && !finished) span.classList.add('cursor');
+      return span;
+    }
+
+    function drawDigits() {
+      displayWrap.innerHTML = '';
+      // rolling window so the display doesn't grow to 100+ characters wide
+      const windowStart = Math.max(0, typedValue.length - 10);
+      const windowEnd = Math.min(target.length, windowStart + 60);
+      if (windowStart > 0) {
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'digit-chunk beyond-range';
+        ellipsis.textContent = '…';
+        displayWrap.appendChild(ellipsis);
+      }
+      for (let pos = windowStart; pos < windowEnd; pos++) {
+        displayWrap.appendChild(renderQDigit(pos));
+      }
+    }
+
+    drawDigits();
+    displayWrap.addEventListener('click', () => hiddenInput.focus());
+
+    async function finish() {
+      if (finished) return;
+      finished = true;
+      clearInterval(timerInterval);
+      hiddenInput.blur();
+      hiddenInput.disabled = true;
+      drawDigits();
+
+      let streak = 0;
+      while (streak < typedValue.length && typedValue[streak] === target[streak]) streak++;
+      const correctCount = [...typedValue].filter((ch, i) => ch === target[i]).length;
+      const accuracy = typedValue.length ? Math.round((correctCount / typedValue.length) * 100) : 0;
+      const elapsedSec = startTime ? Math.min((Date.now() - startTime) / 1000, speedTimeLimit) : 0;
+      const cpm = elapsedSec > 0 ? (correctCount / elapsedSec) * 60 : 0;
+
+      const updated = await recordSpeedrunAttempt(c.id, speedTimeLimit, streak, cpm);
+      await touchDailyStreak();
+      renderHeader();
+
+      const resultBox = document.createElement('div');
+      resultBox.className = 'quiz-result success';
+      const title = document.createElement('h3');
+      title.textContent = `⚡ ${correctCount} correct character${correctCount === 1 ? '' : 's'} typed`;
+      resultBox.appendChild(title);
+      const p = document.createElement('p');
+      const isNewBest = streak >= updated.bestStreak && streak > 0;
+      p.textContent = `Longest streak: ${streak} · Accuracy: ${accuracy}% · ${Math.round(cpm)} correct chars/min${isNewBest ? ' · New personal best!' : ''}`;
+      resultBox.appendChild(p);
+      const againBtn = document.createElement('button');
+      againBtn.className = 'primary-btn';
+      againBtn.style.marginTop = '10px';
+      againBtn.textContent = 'Run again';
+      againBtn.addEventListener('click', () => renderSpeedPanel());
+      resultBox.appendChild(document.createElement('br'));
+      resultBox.appendChild(againBtn);
+      resultHolder.innerHTML = '';
+      resultHolder.appendChild(resultBox);
+    }
+
+    hiddenInput.addEventListener('input', () => {
+      if (finished) return;
+      if (startTime === null) {
+        startTime = Date.now();
+        timerInterval = setInterval(() => {
+          const remaining = speedTimeLimit - (Date.now() - startTime) / 1000;
+          if (remaining <= 0) {
+            timerEl.textContent = '0.0s';
+            finish();
+          } else {
+            timerEl.textContent = `${remaining.toFixed(1)}s`;
+          }
+        }, 100);
+      }
+      const filtered = hiddenInput.value.replace(/[^0-9.]/g, '').slice(0, target.length);
+      hiddenInput.value = filtered;
+      typedValue = filtered;
+      drawDigits();
+      if (typedValue.length === target.length) finish();
+    });
+
+    hiddenInput.focus();
   }
 
   appEl.appendChild(frag);

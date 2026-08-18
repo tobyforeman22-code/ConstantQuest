@@ -87,11 +87,24 @@ const Backend = (() => {
     requireClient();
     const { data, error } = await sb
       .from('profiles')
-      .select('id, username')
+      .select('id, username, current_streak, longest_streak, last_practice_date')
       .eq('id', userId)
       .single();
     if (error) throw error;
     return data;
+  }
+
+  async function updateStreak(userId, currentStreak, longestStreak, lastPracticeDate) {
+    requireClient();
+    const { error } = await sb
+      .from('profiles')
+      .update({
+        current_streak: currentStreak,
+        longest_streak: longestStreak,
+        last_practice_date: lastPracticeDate
+      })
+      .eq('id', userId);
+    if (error) throw error;
   }
 
   /* ---------------- Progress ---------------- */
@@ -119,6 +132,34 @@ const Backend = (() => {
         attempts,
         updated_at: new Date().toISOString()
       }, { onConflict: 'user_id,constant_id,difficulty_id' });
+    if (error) throw error;
+  }
+
+  /* ---------------- Speed Run ---------------- */
+
+  async function fetchAllSpeedruns(userId) {
+    requireClient();
+    const { data, error } = await sb
+      .from('speedruns')
+      .select('constant_id, time_limit, best_streak, best_cpm, attempts')
+      .eq('user_id', userId);
+    if (error) throw error;
+    return data;
+  }
+
+  async function upsertSpeedrun(userId, constantId, timeLimit, bestStreak, bestCpm, attempts) {
+    requireClient();
+    const { error } = await sb
+      .from('speedruns')
+      .upsert({
+        user_id: userId,
+        constant_id: constantId,
+        time_limit: timeLimit,
+        best_streak: bestStreak,
+        best_cpm: bestCpm,
+        attempts,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id,constant_id,time_limit' });
     if (error) throw error;
   }
 
@@ -227,7 +268,9 @@ const Backend = (() => {
 
   return {
     isConfigured, signUp, signIn, signOut, getSession, onAuthStateChange, getProfile, completeProfile,
+    updateStreak,
     fetchAllProgress, upsertProgress,
+    fetchAllSpeedruns, upsertSpeedrun,
     searchUsers, listFriendships, sendFriendRequest, respondToRequest, removeFriend, getUsernamesByIds,
     fetchLeaderboard
   };

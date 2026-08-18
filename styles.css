@@ -103,6 +103,17 @@ a { color: inherit; text-decoration: none; }
   white-space: nowrap;
 }
 
+.streak-chip {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #ffa94d;
+  background: rgba(255, 169, 77, 0.12);
+  border: 1px solid rgba(255, 169, 77, 0.4);
+  border-radius: 20px;
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+
 .app {
   flex: 1;
   max-width: 1100px;
@@ -805,10 +816,100 @@ a { color: inherit; text-decoration: none; }
   padding: 20px 0;
 }
 
+/* Streak banner + achievements (Stats page) */
+.streak-banner {
+  display: flex;
+  gap: 12px;
+  margin: 16px 0 28px;
+}
+
+.streak-stat {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 22px;
+  text-align: center;
+}
+
+.streak-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.streak-label {
+  font-size: 0.75rem;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+
+.stats-section-heading, .achievements-section h2 {
+  font-size: 1rem;
+  color: var(--text-dim);
+  margin: 0 0 12px;
+}
+
+.achievements-section {
+  margin-bottom: 28px;
+}
+
+.achievements-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.achievement-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  text-align: center;
+  opacity: 0.4;
+}
+
+.achievement-card.unlocked {
+  opacity: 1;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.achievement-icon {
+  font-size: 1.8rem;
+  margin-bottom: 6px;
+}
+
+.achievement-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin-bottom: 4px;
+}
+
+.achievement-desc {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  line-height: 1.4;
+}
+
+/* Speed Run mode */
+.speed-limit-buttons {
+  margin-bottom: 14px;
+}
+
+.speed-timer {
+  font-family: 'Courier New', monospace;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+
 @media (max-width: 560px) {
   .detail-head { gap: 12px; }
   .detail-symbol { font-size: 2.4rem; min-width: 56px; }
   .digit-display, .quiz-input-display { font-size: 1.05rem; padding: 14px; }
   .stats-row-name { min-width: 0; }
   .leaderboard-scope-tabs { margin-left: 0; }
+  .streak-banner { flex-wrap: wrap; }
 }

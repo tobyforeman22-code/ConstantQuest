@@ -153,3 +153,6 @@ const DIFFICULTIES = [
   { id: 'hard',   label: 'Hard',   digits: 75 },
   { id: 'master', label: 'Master', digits: 100 }
 ];
+
+// Speed Run time limits, in seconds
+const SPEED_LIMITS = [30, 60, 120];

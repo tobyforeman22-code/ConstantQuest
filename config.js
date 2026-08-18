@@ -9,5 +9,5 @@
 // policies defined in supabase-schema.sql. Never put your "service_role"
 // key here or in any file that ships to the browser.
 
-const SUPABASE_URL = 'https://YOUR-PROJECT-REF.supabase.co';
-const SUPABASE_ANON_KEY = 'YOUR-ANON-PUBLIC-KEY';
+const SUPABASE_URL = 'https://chojjudansjbopwbnwkw.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_Xd9ZHNtcofUSgrCr4Be_JQ_BLAltLEX';
