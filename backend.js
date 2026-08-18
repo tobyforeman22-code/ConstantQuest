@@ -20,11 +20,27 @@ const Backend = (() => {
 
   /* ---------------- Auth ---------------- */
 
-  async function createProfile(userId, username) {
+  // Creates a profile row for userId if one doesn't already exist.
+  // Self-healing: if a prior attempt (interrupted signup, retried
+  // submission, a session auto-restored mid-signup by Supabase's own
+  // email-confirmation redirect, etc.) already created the row, this
+  // just uses it rather than erroring — the previous version threw a
+  // misleading "username already taken" on the id/primary-key conflict
+  // that produces, since Postgres reports both a primary-key clash and
+  // a real username clash with the same 23505 code.
+  async function ensureProfile(userId, username) {
     requireClient();
+    const { data: existing, error: selectError } = await sb
+      .from('profiles').select('id').eq('id', userId).maybeSingle();
+    if (selectError) throw selectError;
+    if (existing) return;
+
     const { error } = await sb.from('profiles').insert({ id: userId, username });
     if (error) {
-      if (error.code === '23505') throw new Error('That username is already taken.');
+      if (error.code === '23505') {
+        if (/pkey|profiles_id/i.test(error.message || '')) return; // lost a create race, that's fine
+        throw new Error('That username is already taken.');
+      }
       throw error;
     }
   }
@@ -36,7 +52,7 @@ const Backend = (() => {
 
     if (data.session) {
       // no email confirmation required — we're logged in immediately
-      await createProfile(data.user.id, username);
+      await ensureProfile(data.user.id, username);
       return data;
     }
 
@@ -54,17 +70,14 @@ const Backend = (() => {
     const pendingKey = 'cq_pending_username_' + email;
     const pendingUsername = localStorage.getItem(pendingKey);
     if (pendingUsername) {
-      const { data: existing } = await sb.from('profiles').select('id').eq('id', data.user.id).maybeSingle();
-      if (!existing) {
-        try { await createProfile(data.user.id, pendingUsername); } catch (e) { /* handled via completeProfile flow */ }
-      }
+      try { await ensureProfile(data.user.id, pendingUsername); } catch (e) { /* handled via completeProfile flow */ }
       localStorage.removeItem(pendingKey);
     }
     return data;
   }
 
   async function completeProfile(userId, username) {
-    return createProfile(userId, username);
+    return ensureProfile(userId, username);
   }
 
   async function signOut() {

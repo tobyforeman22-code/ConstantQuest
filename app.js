@@ -745,6 +745,16 @@ function renderCompleteProfile() {
   });
 
   card.appendChild(form);
+
+  const logoutBtn = document.createElement('button');
+  logoutBtn.type = 'button';
+  logoutBtn.className = 'secondary-btn';
+  logoutBtn.style.marginTop = '14px';
+  logoutBtn.style.width = '100%';
+  logoutBtn.textContent = 'Log out and start over';
+  logoutBtn.addEventListener('click', async () => { await Backend.signOut(); });
+  card.appendChild(logoutBtn);
+
   wrap.appendChild(card);
   appEl.appendChild(wrap);
 }
