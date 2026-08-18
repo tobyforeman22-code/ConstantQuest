@@ -16,9 +16,7 @@
       <span class="brand-symbol">π</span>
       <span class="brand-name">Constant<em>Quest</em></span>
     </a>
-    <nav class="header-nav">
-      <button id="stats-toggle" class="ghost-btn" type="button">My Progress</button>
-    </nav>
+    <nav class="header-nav" id="header-nav"></nav>
   </div>
 </header>
 
@@ -91,6 +89,81 @@
   </div>
 </template>
 
+<template id="tpl-auth">
+  <div class="auth-view">
+    <button class="back-btn" id="auth-back-btn" type="button">&larr; All constants</button>
+    <div class="auth-card">
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-auth-mode="login" type="button">Log In</button>
+        <button class="auth-tab" data-auth-mode="signup" type="button">Sign Up</button>
+      </div>
+      <p class="auth-config-warning hidden" id="auth-config-warning">
+        Supabase isn't configured yet — edit <code>config.js</code> with your project URL and anon key, then run <code>supabase-schema.sql</code> in the Supabase SQL Editor. See README.md.
+      </p>
+      <form id="auth-form" class="auth-form">
+        <label class="auth-field username-field hidden">
+          <span>Username</span>
+          <input type="text" id="auth-username" autocomplete="username" placeholder="e.g. digit_dynamo" maxlength="20">
+        </label>
+        <label class="auth-field">
+          <span>Email</span>
+          <input type="email" id="auth-email" autocomplete="email" required>
+        </label>
+        <label class="auth-field">
+          <span>Password</span>
+          <input type="password" id="auth-password" autocomplete="current-password" required minlength="6">
+        </label>
+        <p class="auth-error hidden" id="auth-error"></p>
+        <button type="submit" class="primary-btn auth-submit" id="auth-submit">Log In</button>
+      </form>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-friends">
+  <div class="friends-view">
+    <button class="back-btn" id="friends-back-btn" type="button">&larr; All constants</button>
+    <h1>Friends</h1>
+
+    <div class="friend-search-row">
+      <input type="text" id="friend-search-input" placeholder="Search by username…" autocomplete="off">
+      <button id="friend-search-btn" class="secondary-btn" type="button">Search</button>
+    </div>
+    <div id="friend-search-results" class="friend-results"></div>
+
+    <div id="friend-requests-section">
+      <h2>Pending Requests</h2>
+      <div id="friend-requests-list" class="friend-list"></div>
+    </div>
+
+    <div>
+      <h2>Your Friends</h2>
+      <div id="friend-list" class="friend-list"></div>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-leaderboard">
+  <div class="leaderboard-view">
+    <button class="back-btn" id="leaderboard-back-btn" type="button">&larr; All constants</button>
+    <h1>Leaderboard</h1>
+
+    <div class="leaderboard-controls">
+      <select id="lb-constant-select"></select>
+      <select id="lb-difficulty-select"></select>
+      <div class="leaderboard-scope-tabs">
+        <button class="mode-tab active" data-scope="global" type="button">🌍 Global</button>
+        <button class="mode-tab" data-scope="friends" type="button">🤝 Friends</button>
+      </div>
+    </div>
+
+    <div id="leaderboard-table" class="leaderboard-table"></div>
+  </div>
+</template>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="backend.js"></script>
 <script src="constants-data.js"></script>
 <script src="app.js"></script>
 </body>
