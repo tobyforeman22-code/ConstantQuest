@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ConstantQuest — Learn the Constants of Mathematics</title>
+<meta name="description" content="Learn and quiz yourself on the famous mathematical constants — pi, e, the golden ratio, and more — up to 100 decimal places.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>&#960;</text></svg>">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="#/" class="brand">
+      <span class="brand-symbol">π</span>
+      <span class="brand-name">Constant<em>Quest</em></span>
+    </a>
+    <nav class="header-nav">
+      <button id="stats-toggle" class="ghost-btn" type="button">My Progress</button>
+    </nav>
+  </div>
+</header>
+
+<main id="app" class="app"></main>
+
+<footer class="site-footer">
+  <p>Digits generated to 100 decimal places with high-precision arithmetic (mpmath). Built for learning, one digit at a time.</p>
+</footer>
+
+<!-- Templates -->
+<template id="tpl-home">
+  <section class="hero">
+    <h1>Master the constants that run the universe.</h1>
+    <p>Pick a constant, learn its digits with chunked memory drills, then put yourself to the test — 25, 50, 75, or all 100 decimal places.</p>
+  </section>
+  <section class="constant-grid" id="constant-grid"></section>
+</template>
+
+<template id="tpl-card">
+  <article class="card" tabindex="0">
+    <div class="card-top">
+      <span class="card-symbol"></span>
+      <span class="card-badges"></span>
+    </div>
+    <h3 class="card-name"></h3>
+    <p class="card-preview"></p>
+    <div class="card-progress">
+      <div class="card-progress-bar"><div class="card-progress-fill"></div></div>
+      <span class="card-progress-label"></span>
+    </div>
+  </article>
+</template>
+
+<template id="tpl-detail">
+  <div class="detail">
+    <button class="back-btn" id="back-btn" type="button">&larr; All constants</button>
+
+    <section class="detail-head">
+      <div class="detail-symbol"></div>
+      <div>
+        <h1 class="detail-name"></h1>
+        <p class="detail-formula"></p>
+      </div>
+    </section>
+
+    <p class="detail-fact"></p>
+
+    <div class="difficulty-row">
+      <span class="difficulty-label">Difficulty:</span>
+      <div class="difficulty-buttons" id="difficulty-buttons"></div>
+      <span class="best-streak" id="best-streak"></span>
+    </div>
+
+    <div class="mode-tabs">
+      <button class="mode-tab active" data-mode="learn" type="button">📖 Learn</button>
+      <button class="mode-tab" data-mode="quiz" type="button">✏️ Quiz</button>
+    </div>
+
+    <section class="mode-panel" id="learn-panel"></section>
+    <section class="mode-panel hidden" id="quiz-panel"></section>
+  </div>
+</template>
+
+<template id="tpl-stats">
+  <div class="stats-view">
+    <button class="back-btn" id="stats-back-btn" type="button">&larr; All constants</button>
+    <h1>My Progress</h1>
+    <p class="stats-intro">Perfect, no-mistake runs earn a mastery badge for that difficulty. Keep drilling to fill the whole row.</p>
+    <div class="stats-table" id="stats-table"></div>
+  </div>
+</template>
+
+<script src="constants-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
