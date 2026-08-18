@@ -15,6 +15,9 @@ create table public.profiles (
     char_length(username) between 3 and 20
     and username ~ '^[A-Za-z0-9_]+$'
   ),
+  current_streak int not null default 0,
+  longest_streak int not null default 0,
+  last_practice_date date,
   created_at timestamptz not null default now()
 );
 
@@ -95,6 +98,34 @@ create policy "Addressee can respond to a request"
 create policy "Either side can remove a friendship"
   on public.friendships for delete
   using (auth.uid() = requester_id or auth.uid() = addressee_id);
+
+-- ---------------------------------------------------------------
+-- speedruns: personal-best streak/speed per user, constant, time limit
+-- ---------------------------------------------------------------
+create table public.speedruns (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  constant_id text not null,
+  time_limit int not null,
+  best_streak int not null default 0,
+  best_cpm numeric not null default 0,
+  attempts int not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, constant_id, time_limit)
+);
+
+alter table public.speedruns enable row level security;
+
+create policy "Speedruns are viewable by everyone"
+  on public.speedruns for select
+  using (true);
+
+create policy "Users can insert their own speedruns"
+  on public.speedruns for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update their own speedruns"
+  on public.speedruns for update
+  using (auth.uid() = user_id);
 
 -- ---------------------------------------------------------------
 -- leaderboard_entries: progress joined with usernames, for reading

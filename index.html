@@ -73,10 +73,12 @@
     <div class="mode-tabs">
       <button class="mode-tab active" data-mode="learn" type="button">📖 Learn</button>
       <button class="mode-tab" data-mode="quiz" type="button">✏️ Quiz</button>
+      <button class="mode-tab" data-mode="speed" type="button">⚡ Speed Run</button>
     </div>
 
     <section class="mode-panel" id="learn-panel"></section>
     <section class="mode-panel hidden" id="quiz-panel"></section>
+    <section class="mode-panel hidden" id="speed-panel"></section>
   </div>
 </template>
 
@@ -85,6 +87,7 @@
     <button class="back-btn" id="stats-back-btn" type="button">&larr; All constants</button>
     <h1>My Progress</h1>
     <p class="stats-intro">Perfect, no-mistake runs earn a mastery badge for that difficulty. Keep drilling to fill the whole row.</p>
+    <h2 class="stats-section-heading">Constant Progress</h2>
     <div class="stats-table" id="stats-table"></div>
   </div>
 </template>
@@ -165,6 +168,7 @@
 <script src="config.js"></script>
 <script src="backend.js"></script>
 <script src="constants-data.js"></script>
+<script src="achievements.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
